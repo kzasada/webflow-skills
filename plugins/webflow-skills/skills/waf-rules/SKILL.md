@@ -128,7 +128,7 @@ Only the rule type being changed is checked. `validate_waf_rule` and `test_waf_r
 ```
 
 - 1-250 ISO 3166-1 alpha-2 codes: `GB`, not `UK`. Unofficial codes such as `EU` and `XK` are rejected. Lowercase is accepted and stored uppercase.
-- `BLOCK` blocks the listed countries. `ALLOW` blocks every country that isn't listed.
+- `BLOCK` blocks the listed countries. `ALLOW` blocks every country that isn't listed, and may also block requests without country data.
 - One `mode` and one optional `paths` for the whole list, so a domain can't have a country block list and allow list at the same time.
 
 ### asnRules
@@ -138,7 +138,7 @@ Only the rule type being changed is checked. `validate_waf_rule` and `test_waf_r
 ```
 
 - 1-100 ASNs as numbers, not strings like `"AS14061"`. Examples: 16509 Amazon/AWS, 14061 DigitalOcean, 24940 Hetzner, 16276 OVH.
-- `mode` and `paths` work as in geoRules. Blocking a hosting network blocks everything that runs there, not only scrapers.
+- `mode` and `paths` work as in geoRules, so an `ALLOW` list may also block requests without ASN data. Blocking a hosting network blocks everything that runs there, not only scrapers.
 
 ### userAgentRules
 
@@ -168,7 +168,9 @@ Above, only AcmeApp can call `/api`, `BadBot` is blocked everywhere, and request
 
 ### Blocking bots and AI crawlers
 
-Bot bypass runs before all of the site's WAF rules (source: waf-worker `src/index.ts`). While it's on (`bypassVerifiedBots: true`, the default), every bot Cloudflare verifies skips them. Cloudflare's verified list includes the major search engines and can include AI crawlers.
+<!-- Maintainers: source is webflow/waf-worker src/index.ts (internal repo), where the verified-bot bypass runs before the site's rules. -->
+
+Bot bypass runs before all of the site's WAF rules. While it's on (`bypassVerifiedBots: true`, the default), every bot Cloudflare verifies skips them. Cloudflare's verified list includes the major search engines and can include AI crawlers.
 
 - While Bot bypass is on, a User-Agent block can't stop a verified crawler. If a block on a crawler doesn't take effect, the crawler is probably verified. Say this in the preview for any crawler block.
 - Turning Bot bypass off is a setting the user changes in the Dashboard, under Site settings > Security. These actions can't change it. With it off, the rules also apply to search engine crawlers, which can affect indexing.
@@ -264,7 +266,7 @@ Block traffic from Russia and North Korea.
 Only let visitors from the US and Canada in.
 ```
 
-1. `validate_waf_rule` with `{"countryList": ["US", "CA"], "mode": "ALLOW"}` returns the explanation "Allows requests only from US and CA, and blocks every other country." and a `geo_allow_list_default_deny` risk finding. Tell the user, and ask whether it should apply only to some paths, such as `/admin`.
+1. `validate_waf_rule` with `{"countryList": ["US", "CA"], "mode": "ALLOW"}` returns an `explanation` describing the allow-list and a `geo_allow_list_default_deny` risk finding. Tell the user that every other country will be blocked, and ask whether it should apply only to some paths, such as `/admin`.
 2. The user wants it everywhere. Test, preview, and get `confirm`. `update_waf_rule` answers `HighRiskWafChange`. Show:
    ```
    High-risk change: Geo allow-list (default deny)
