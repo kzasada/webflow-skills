@@ -184,6 +184,7 @@ Bot bypass runs before all of the site's WAF rules. While it's on (`bypassVerifi
 
 - 1-20 entries. Each `path` starts with `/`. Omit `paths` to apply everywhere; an empty list is rejected.
 - `prefix` (default) matches the path and everything under it: `/api` matches `/api` and `/api/v1`, not `/api-docs`. `exact` matches only that path. Trailing slashes count.
+- With `prefix`, `/blog` covers `/blog` and the pages under it, while `/blog/` covers only `/blog/` itself, not `/blog/post`.
 - `{ "path": "/" }` matches only the home page, not the whole site.
 - geoRules and asnRules take `paths` on the rule, userAgentRules on each pattern, and ipRules not at all.
 
