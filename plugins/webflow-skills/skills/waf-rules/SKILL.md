@@ -1,6 +1,6 @@
 ---
 name: webflow-mcp:waf-rules
-description: Review and change a Webflow site's Web Application Firewall (WAF) rules through Webflow MCP. Use when the user wants to block or allow countries, IP addresses or CIDR ranges, networks (ASNs), bots, scrapers, or User-Agents, optionally only on some paths; add, edit, or remove firewall or WAF rules; review or explain the current rules; or check bot traffic before changing them. Every change is validated, previewed, and confirmed by the user before it reaches live traffic. Enterprise sites only, and WAF MCP must be enabled for the workspace.
+description: Review and change a Webflow site's Web Application Firewall (WAF) rules through Webflow MCP. Use when the user wants to block or allow countries, IP addresses or CIDR ranges, networks (ASNs), bots, AI crawlers, scrapers, or User-Agents, optionally only on some paths; add, edit, or remove firewall or WAF rules; review or explain the current rules; or check bot traffic before changing them. Every change is validated, previewed, and confirmed by the user before it reaches live traffic. Needs an Enterprise plan that includes WAF, and WAF MCP must be enabled for the workspace.
 ---
 
 # WAF Rules
@@ -25,8 +25,8 @@ Review and change the Web Application Firewall (WAF) rules Webflow enforces on a
 
 The API refuses a call by name when one of these is missing (see Errors):
 
-- **Enterprise:** the site's plan includes WAF (Enterprise plans), or Webflow has turned WAF on for the site or its workspace.
-- **WAF MCP enabled for the workspace:** WAF MCP is rolling out gradually and has to be enabled for the site's workspace. If `data_enterprise_tool` doesn't list the WAF actions, or a call returns `waf_mcp_not_enabled`, it isn't enabled yet. Tell the user. They can still manage rules in the dashboard under Site settings > Security.
+- **Enterprise plan:** WAF MCP needs an Enterprise plan that includes WAF.
+- **WAF MCP enabled for the workspace:** WAF MCP is rolling out, so if `data_enterprise_tool` doesn't list the WAF actions, or a call returns `waf_mcp_not_enabled`, it isn't enabled for the workspace yet. Tell the user. They can still manage rules in the Dashboard under Site settings > Security.
 - **Role:** the user must be able to manage the site's custom domains: Site manager, Designer, Limited designer, or a custom role with that permission. Designer (needs approval), Marketer, Content editor, and Reviewer can't.
 - **Scopes:** `site_config:read` for reads and `validate_waf_rule`, `site_config:write` for `test_waf_rules`, `update_waf_rule`, and `delete_waf_rule`. The Webflow MCP app requests both. If a call returns `missing_scopes`, the user has to reauthorize the connection.
 
@@ -34,7 +34,7 @@ The API refuses a call by name when one of these is missing (see Errors):
 
 ### Phase 1: Read the current rules
 
-1. Call `webflow_guide_tool`. When WAF MCP is on for the user, it includes a WAF section.
+1. Call `webflow_guide_tool`. When WAF MCP is enabled, it includes a WAF section.
 2. Resolve the site with `list_sites`. If the user didn't name one, or the name matches several, ask.
 3. Call `get_waf_rules` and keep:
    - `byDomain`: each connected custom domain's config, or `null` when it has none. A config holds up to four rule types (`ipRules`, `geoRules`, `asnRules`, `userAgentRules`) plus the bot bypass settings.
@@ -116,7 +116,7 @@ Only the rule type being changed is checked. `validate_waf_rule` and `test_waf_r
 }
 ```
 
-- 1-100 entries: IPv4 or IPv6 addresses or CIDR ranges. IPv4 needs all four parts (`10.0.0.0/8`, not `10/8`).
+- 1-100 entries: IPv4 or IPv6 addresses or CIDR ranges. The size limit can run out before 100 (see "Size limit"). IPv4 needs all four parts (`10.0.0.0/8`, not `10/8`).
 - First match wins. Above, `198.51.100.7` isn't blocked by the `/24` because it matches first.
 - `ALLOW` only skips the rest of the IP list. It doesn't exempt the request from geo, ASN, or user-agent rules.
 - IP entries can't have `paths`.
@@ -166,6 +166,14 @@ Above, only AcmeApp can call `/api`, `BadBot` is blocked everywhere, and request
 - `pattern`: up to 256 characters, using letters, digits, spaces, and `. , ; : / ( ) [ ] - _ + ! ~ * ? @ # =`.
 - `paths` is set per pattern. A pattern whose `paths` don't match the request is skipped and the next one is checked.
 
+### Blocking bots and AI crawlers
+
+Bot bypass runs before all of the site's WAF rules (source: waf-worker `src/index.ts`). While it's on (`bypassVerifiedBots: true`, the default), every bot Cloudflare verifies skips them. Cloudflare's verified list includes the major search engines and can include AI crawlers.
+
+- While Bot bypass is on, a User-Agent block can't stop a verified crawler. If a block on a crawler doesn't take effect, the crawler is probably verified. Say this in the preview for any crawler block.
+- Turning Bot bypass off is a setting the user changes in the Dashboard, under Site settings > Security. These actions can't change it. With it off, the rules also apply to search engine crawlers, which can affect indexing.
+- Bots with Webflow bot tokens skip the rules the same way (`bypassAuthorizedBots`).
+
 ### Path scope
 
 ```json
@@ -179,9 +187,8 @@ Above, only AcmeApp can call `/api`, `BadBot` is blocked everywhere, and request
 
 ### How rules combine
 
-- For each request, bot bypasses run first, then `ipRules`, `geoRules`, `asnRules`, and `userAgentRules`, in that order. The first BLOCK stops evaluation. If nothing blocks, the request is served.
+- For each request, Bot bypass runs first (see "Blocking bots and AI crawlers"), then `ipRules`, `geoRules`, `asnRules`, and `userAgentRules`, in that order. The first BLOCK stops evaluation. If nothing blocks, the request is served.
 - `ALLOW` never overrides another rule type. An IP `ALLOW` doesn't let a visitor past a geo block.
-- While `bypassVerifiedBots` is true (the default; the Bot bypass switch in Site settings > Security), bots that Cloudflare verifies, such as Googlebot and Bingbot, skip every rule, so a user-agent rule can't block them. `bypassAuthorizedBots` does the same for bots with Webflow bot tokens. These actions can't change either setting.
 
 ### Domain scope
 
@@ -192,7 +199,7 @@ Above, only AcmeApp can call `/api`, `BadBot` is blocked everywhere, and request
 
 ### Size limit
 
-Each domain's whole WAF config, all rule types together, has a storage limit. `targets[].candidateBytes` and `candidateBytesLimit` show the headroom, and going over is a `ValidationError`. Long IP lists and many `paths` entries use it up fastest.
+Each domain's whole WAF config, all rule types together, has a storage limit. `targets[].candidateBytes` and `candidateBytesLimit` show the headroom, and going over is a `ValidationError`. Long IP lists and many `paths` entries use it up fastest: an IP list in the high double digits can reach it before the 100-entry cap.
 
 ## Errors
 
