@@ -128,7 +128,7 @@ Only the rule type being changed is checked. `validate_waf_rule` and `test_waf_r
 ```
 
 - 1-250 ISO 3166-1 alpha-2 codes: `GB`, not `UK`. Unofficial codes such as `EU` and `XK` are rejected. Lowercase is accepted and stored uppercase.
-- `BLOCK` blocks the listed countries. `ALLOW` blocks every country that isn't listed, and may also block requests without country data.
+- `BLOCK` blocks the listed countries. `ALLOW` blocks every country that isn't listed, and may also block requests without country data (see [IP geolocation](https://developers.cloudflare.com/network/ip-geolocation/)).
 - One `mode` and one optional `paths` for the whole list, so a domain can't have a country block list and allow list at the same time.
 
 ### asnRules
@@ -172,7 +172,7 @@ Above, only AcmeApp can call `/api`, `BadBot` is blocked everywhere, and request
 
 Bot bypass runs before all of the site's WAF rules. While it's on (`bypassVerifiedBots: true`, the default), every bot Cloudflare verifies skips them. Cloudflare's verified list includes the major search engines and can include AI crawlers.
 
-- While Bot bypass is on, a User-Agent block can't stop a verified crawler. If a block on a crawler doesn't take effect, the crawler is probably verified. Say this in the preview for any crawler block.
+- While Bot bypass is on, a User-Agent block can't stop a verified crawler. Cloudflare's [bot directory](https://radar.cloudflare.com/bots/directory) lists which bots are verified. If a block on a crawler doesn't take effect, the crawler is probably verified. Say this in the preview for any crawler block.
 - Turning Bot bypass off is a setting the user changes in the Dashboard, under Site settings > Security. These actions can't change it. With it off, the rules also apply to search engine crawlers, which can affect indexing.
 - Bots with Webflow bot tokens skip the rules the same way (`bypassAuthorizedBots`).
 
@@ -203,6 +203,14 @@ Bot bypass runs before all of the site's WAF rules. While it's on (`bypassVerifi
 ### Size limit
 
 Each domain's whole WAF config, all rule types together, has a storage limit. `targets[].candidateBytes` and `candidateBytesLimit` show the headroom, and going over is a `ValidationError`. Long IP lists and many `paths` entries use it up fastest: an IP list in the high double digits can reach it before the 100-entry cap.
+
+### Cloudflare references
+
+Webflow's WAF uses Cloudflare's data about each request (its country, ASN, and verified-bot status), but the rule format and behavior above are Webflow's own. Cloudflare's WAF custom rules, managed rules, rate limiting rules, and rule expressions aren't available through Webflow's WAF, so don't suggest or write them.
+
+- [IP geolocation](https://developers.cloudflare.com/network/ip-geolocation/): when a visitor's country looks wrong. Country data is Cloudflare's estimate, updated several times a week, and the page has a correction form.
+- [Radar IP lookup](https://radar.cloudflare.com/ip): to check an IP's country and ASN while writing `ipRules`, `geoRules`, or `asnRules`. ASN pages follow `https://radar.cloudflare.com/as<number>`, for example [radar.cloudflare.com/as13335](https://radar.cloudflare.com/as13335). Radar challenges automated requests, so if you can't load a page, give the user the link.
+- [Verified bots](https://developers.cloudflare.com/bots/concepts/bot/verified-bots/): what makes a bot verified. Verified bots skip all WAF rules while Bot bypass is on; to check a specific crawler, see "Blocking bots and AI crawlers".
 
 ## Errors
 
